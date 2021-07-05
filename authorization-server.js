@@ -56,122 +56,123 @@ app.use(bodyParser.urlencoded({ extended: true }))
 app.get("/authorize", (req, res) => {
 	const clientId = req.query.client_id
 	const client = clients[clientId]
-// 2.2. Verifying the client ID
-		if (!client) {
-			res.status(401).send("Error: client not authorized")
-			return 
-		} 
-// 2.3. Validating the scopes requested
-// typo scopes
-		console.log(typeof req.query.scope)
-		if ( 
-			typeof req.query.scope !== "string" || 
-			!containsAll(client.scope, req.query.scope.split(" ")) 
-		) { 
-			res.status(401).send("Error: Invalid scope")
-			return
-		}	 
+	// 2.2. Verifying the client ID
+	if (!client) {
+		res.status(401).send("Error: client not authorized")
+		return
+	}
+	// 2.3. Validating the scopes requested
+	if (
+		typeof req.query.scope !== "string" ||
+		!containsAll(client.scopes, req.query.scope.split(" "))
+	) {
+		res.status(401).send("Error: Invalid scope")
+		return
+	}
 
-// 2.4. Storing the request
-		const requestId = randomString() 
-		requests[requestId] = req.query
+	// 2.4. Storing the request
+	const requestId = randomString()
+	requests[requestId] = req.query
 
-// 2.5. Rendering the login page + template variables
-		res.render("login", {
-			client,
-			scope: req.query.scope,
-			requestId,
-		})
+	// 2.5. Rendering the login page + template variables
+	res.render("login", {
+		client,
+		scope: req.query.scope,
+		requestId,
+	})
 })
 
-		
+
 //2.6. Creating the approve route
-		app.post("/approve", (req, res) => {
-			const { userName, password, requestId } = req.body
-//2.7. Verifying the username and password
-			if (!userName || users[userName] !== password) {
-				res.status(401).send("Error: User not authorized")
-				return
-			}
+app.post("/approve", (req, res) => {
+	const { userName, password, requestId } = req.body
+	//2.7. Verifying the username and password
+	if (!userName || users[userName] !== password) {
+		res.status(401).send("Error: User not authorized")
+		return
+	}
 
-//2.8. Checking if the request exists
-			const clientReq = requests[requestId]
-			delete requests[requestId]
-			if (!clientReq) {
-				res.status(401).send("Error: Invalid User Request")
-				return 
-			} 
+	//2.8. Checking if the request exists
+	const clientReq = requests[requestId]
+	delete requests[requestId]
+	if (!clientReq) {
+		res.status(401).send("Error: Invalid User Request")
+		return
+	}
 
-//2.9. Storing the request and userName
-			const code = randomString()
-			authorizationCodes[code] = { clientReq, userName }
+	//2.9. Storing the request and userName
+	const code = randomString()
+	authorizationCodes[code] = { clientReq, userName }
 
-//2.10. Redirecting the user
-			const redirectUri = url.parse(clientReq.redirect_uri)
-			redirectUri.query = {
-				code,
-				state: clientReq.state,
-			}
-			res.redirect(url.format(redirectUri))
-		})
+	//2.10. Redirecting the user
+	const redirectUri = url.parse(clientReq.redirect_uri)
+	redirectUri.query = {
+		code,
+		state: clientReq.state,
+	}
+	res.redirect(url.format(redirectUri))
+})
 
 //2.11. Creating the token route
-app.post("/token", (req, res) => {		
-//2.12. Checking if authorization credentials exist
-		let authCredentials = req.headers.authorization
-		if (!authCredentials) {
-			res.status(401).send("Error: Not Authorized")
-			return 
-		}
-//2.13. Verifying the authorization header
-		const { clientId, clientSecret } = decodeAuthCredentials(authCredentials)
-		const client = clients[clientId]
-		if (!client || client.clientSecret !== clientSecret) {
-			res.status(401).send("Error: client not authorized")
-			return
-		}
-//2.14. Verifying the authorization code
-		const code = req.body.code
-		if (!code || !authorizationCodes[code]) {
-			res.status(401).send("Error: invalid code")
-			return
-		}
-//2.15. Issuing the access token
-		const { clientReq, userName } = authorizationCodes[code]
-		delete authorizationCodes[code]
-		const token = jwt.sign(
-			{
-				userName,
-				scope: clientReq.scope,
-			},
-			config.privateKey,
-			{
-				algorithm: "RS256",
-				expiresIn: 300,
-				issuer: "http://localhost:" + config.port,
-			}
-		)
-
-//2.16. Returning a response on successful authorization		 
-
-		res.json({
-			access_token: token,
-			token_type: "Bearer",
+app.post("/token", (req, res) => {
+	//2.12. Checking if authorization credentials exist
+	let authCredentials = req.headers.authorization
+	if (!authCredentials) {
+		res.status(401).send("Error: Not Authorized")
+		return
+	}
+	//2.13. Verifying the authorization header
+	const { clientId, clientSecret } = decodeAuthCredentials(authCredentials)
+	const client = clients[clientId]
+	if (!client || client.clientSecret !== clientSecret) {
+		res.status(401).send("Error: client not authorized")
+		return
+	}
+	//2.14. Verifying the authorization code
+	const code = req.body.code
+	if (!code || !authorizationCodes[code]) {
+		res.status(401).send("Error: invalid code")
+		return
+	}
+	//2.15. Issuing the access token
+	const { clientReq, userName } = authorizationCodes[code]
+	delete authorizationCodes[code]
+	const token = jwt.sign(
+		{
+			userName,
 			scope: clientReq.scope,
-		}) 
+		},
+		config.privateKey,
+		{
+			algorithm: "RS256",
+			expiresIn: 300,
+			issuer: "http://localhost:" + config.port,
+		}
+	)
 
-		 
+	//2.16. Returning a response on successful authorization		 
+
+	res.json({
+		access_token: token,
+		token_type: "Bearer",
+		scope: clientReq.scope,
+	})
+
+
 })
 
 
-
- 
 
 const server = app.listen(config.port, "localhost", function () {
 	var host = server.address().address
-	var port = server.address().port
+	var port = server.address().port;
+
+	console.log("Server running: " + host + ", " + port);
 })
 
-// for testing purposes
+
 
 module.exports = { app, requests, authorizationCodes, server }
+
+
+

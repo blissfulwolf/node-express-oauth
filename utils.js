@@ -6,6 +6,9 @@ function randomString() {
 	return randomBytes.toString("base64")
 }
 
+// A1 = [1, 2, 3]
+// A2 = [0]
+// checks if A2 is subset of A1
 function containsAll(arr1, arr2) {
 	const arr1Set = new Set()
 	for (let i = 0; i < arr1.length; i++) {
